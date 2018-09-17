@@ -148,13 +148,24 @@ func doRoundTrip(c *Client, setHeaders func(*http.Request), in, out Message) err
 			Msg:        string(body),
 		}
 	}
+	return xml.NewDecoder(resp.Body).Decode(out)
+}
 
+func doRoundTripWithHeader(c *Client, setHeaders func(*http.Request), in, out, header Message) error {
+	marshalStructure := struct {
+		XMLName xml.Name `xml:"Envelope"`
+		Header  Header
+		Body    Message
+	}{Body: out, Header: header}
+	return doRoundTrip(c, setHeaders, in, &marshalStructure)
+}
+
+func doRoundSimpleTrip(c *Client, setHeaders func(*http.Request), in, out Message) error {
 	marshalStructure := struct {
 		XMLName xml.Name `xml:"Envelope"`
 		Body    Message
 	}{Body: out}
-
-	return xml.NewDecoder(resp.Body).Decode(&marshalStructure)
+	return doRoundTrip(c, setHeaders, in, &marshalStructure)
 }
 
 // RoundTrip implements the RoundTripper interface.
@@ -181,7 +192,7 @@ func (c *Client) RoundTrip(in, out Message) error {
 			r.Header.Add("SOAPAction", actionName)
 		}
 	}
-	return doRoundTrip(c, headerFunc, in, out)
+	return doRoundSimpleTrip(c, headerFunc, in, out)
 }
 
 // RoundTripWithAction implements the RoundTripper interface for SOAP clients
@@ -206,7 +217,32 @@ func (c *Client) RoundTripWithAction(soapAction string, in, out Message) error {
 			r.Header.Add("SOAPAction", actionName)
 		}
 	}
-	return doRoundTrip(c, headerFunc, in, out)
+	return doRoundSimpleTrip(c, headerFunc, in, out)
+}
+
+// RoundTripWithAction implements the RoundTripper interface for SOAP clients
+// that need to set the SOAPAction header.
+func (c *Client) RoundTripWithActionAndHeader(soapAction string, in, out, header Message) error {
+	headerFunc := func(r *http.Request) {
+		if c.UserAgent != "" {
+			r.Header.Add("User-Agent", c.UserAgent)
+		}
+		var actionName string
+		ct := c.ContentType
+		if ct == "" {
+			ct = "text/xml"
+		}
+		r.Header.Set("Content-Type", ct)
+		if in != nil {
+			if c.ExcludeActionNamespace {
+				actionName = soapAction
+			} else {
+				actionName = fmt.Sprintf("%s/%s", c.Namespace, soapAction)
+			}
+			r.Header.Add("SOAPAction", actionName)
+		}
+	}
+	return doRoundTripWithHeader(c, headerFunc, in, out, header)
 }
 
 // RoundTripSoap12 implements the RoundTripper interface for SOAP 1.2.
@@ -214,7 +250,7 @@ func (c *Client) RoundTripSoap12(action string, in, out Message) error {
 	headerFunc := func(r *http.Request) {
 		r.Header.Add("Content-Type", fmt.Sprintf("application/soap+xml; charset=utf-8; action=\"%s\"", action))
 	}
-	return doRoundTrip(c, headerFunc, in, out)
+	return doRoundSimpleTrip(c, headerFunc, in, out)
 }
 
 // HTTPError is detailed soap http error

@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+
+	"golang.org/x/net/html/charset"
 )
 
 // XSINamespace is a link to the XML Schema instance namespace.

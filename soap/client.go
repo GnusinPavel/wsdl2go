@@ -16,7 +16,7 @@ import (
 // XSINamespace is a link to the XML Schema instance namespace.
 const XSINamespace = "http://www.w3.org/2001/XMLSchema-instance"
 
-var xmlTyperType reflect.Type = reflect.TypeOf((*XMLTyper)(nil)).Elem()
+var xmlTyperType = reflect.TypeOf((*XMLTyper)(nil)).Elem()
 
 // A RoundTripper executes a request passing the given req as the SOAP
 // envelope body. The HTTP response is then de-serialized onto the resp
@@ -136,7 +136,9 @@ func doRoundTrip(c *Client, setHeaders func(*http.Request), in, out Message) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if c.Post != nil {
 		c.Post(resp)
 	}
@@ -252,7 +254,11 @@ func (c *Client) RoundTripWithActionAndHeader(soapAction string, in, out, header
 // RoundTripSoap12 implements the RoundTripper interface for SOAP 1.2.
 func (c *Client) RoundTripSoap12(action string, in, out Message) error {
 	headerFunc := func(r *http.Request) {
-		r.Header.Add("Content-Type", fmt.Sprintf("application/soap+xml; charset=utf-8; action=\"%s\"", action))
+		if c.ContentType != "" {
+			r.Header.Add("Content-Type", c.ContentType)
+		} else {
+			r.Header.Add("Content-Type", fmt.Sprintf("application/soap+xml; charset=utf-8; action=\"%s\"", action))
+		}
 	}
 	return doRoundSimpleTrip(c, headerFunc, in, out)
 }
